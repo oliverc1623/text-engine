@@ -121,7 +121,7 @@ fn print_events() -> Result<()> {
         if player_hp == 0{
             break;
         }
-
+        
         println!("Score: {}", player_score);
         println!("HP: {}", player_hp);
         println!("Player inventory: {:?}", inventory);
@@ -152,11 +152,47 @@ fn print_events() -> Result<()> {
                 map[player_pos.0][player_pos.1] = prev_point;
                 player_pos.1 += 1;
             }
+            if event == Event::Key(KeyCode::Char('x').into()){
+                if inventory.contains(&Item::Sword){
+                    if map[player_pos.0][player_pos.1 + 1] == '*' {
+                        map[player_pos.0][player_pos.1 + 1] = '.';
+                    }
+                    if map[player_pos.0 + 1][player_pos.1] == '*' {
+                        map[player_pos.0 + 1][player_pos.1] = '.';
+                    }
+                    if map[player_pos.0 + 1][player_pos.1 + 1] == '*' {
+                        map[player_pos.0 + 1][player_pos.1 + 1] = '.';
+                    }
+                    if map[player_pos.0 - 1][player_pos.1] == '*' {
+                        map[player_pos.0 - 1][player_pos.1] = '.';
+                    }
+                    if map[player_pos.0][player_pos.1 - 1] == '*' {
+                        map[player_pos.0][player_pos.1 - 1] = '.';
+                    }
+                    if map[player_pos.0 - 1][player_pos.1 - 1] == '*' {
+                        map[player_pos.0 - 1][player_pos.1 - 1] = '.';
+                    }
+                    if map[player_pos.0 - 1][player_pos.1 + 1] == '*' {
+                        map[player_pos.0 - 1][player_pos.1 + 1] = '.';
+                    }
+                    if map[player_pos.0 + 1][player_pos.1 - 1] == '*' {
+                        map[player_pos.0 + 1][player_pos.1 - 1] = '.';
+                    }
+                }                
+            }
             if event == Event::Key(KeyCode::Esc.into()) {
                 break;
             }
         } else {
             // Timeout expired, no event for 1s
+            let mut rand_y = thread_rng().gen_range(1, map[0].len() - 1);
+            let mut rand_x = thread_rng().gen_range(1, map.len() - 1);
+            // make sure item coordinates are not the same as player default position
+            while rand_y == 1 && rand_x == 1 || map[rand_y][rand_x] != '.' {
+                rand_y = thread_rng().gen_range(1, map[0].len() - 1);
+                rand_x = thread_rng().gen_range(1, map.len() - 1);
+            }
+            map[rand_y][rand_x] = '*';
         }
 
         match map[player_pos.0][player_pos.1] {
