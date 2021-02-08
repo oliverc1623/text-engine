@@ -49,7 +49,7 @@ fn main() {
         }
     ];
 
-    let mut inventory: Vec<Item> = vec![];
+    let inventory: Vec<Item> = vec![];
 
     let end_rooms = [RoomID(2), RoomID(3)];
     let mut input = String::new();

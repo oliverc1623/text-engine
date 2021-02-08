@@ -2,16 +2,39 @@ use rand::{thread_rng, Rng};
 use std::io;
 use std::io::Write;
 // use std::thread::sleep;
+use std::string::String;
 use std::{io::stdout, time::Duration};
 use text_engine::*;
 
 pub use crossterm::{
+    cursor,
     cursor::position,
-    event::{self, poll, read, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
-    execute,
-    terminal::{self, disable_raw_mode, enable_raw_mode, Clear, ClearType},
+    event::{self, poll, read, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent},
+    execute, queue, style,
+    style::Color,
+    terminal::{
+        self, disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
+        LeaveAlternateScreen,
+    },
     Command, Result,
 };
+
+pub fn read_line() -> Result<String> {
+    let mut line = String::new();
+    while let Event::Key(KeyEvent { code, .. }) = event::read()? {
+        match code {
+            KeyCode::Enter => {
+                break;
+            }
+            KeyCode::Char(c) => {
+                line.push(c);
+            }
+            _ => {}
+        }
+    }
+
+    Ok(line)
+}
 
 fn generate_map(room: &text_engine::Room) -> Vec<Vec<char>> {
     let mut map = vec![vec!['.'; room.w]; room.h];
@@ -26,7 +49,7 @@ fn generate_map(room: &text_engine::Room) -> Vec<Vec<char>> {
         row[room.w - 1] = '#';
     }
     map[1][0] = '|'; // initialize backdoor
-    for i in 0..room.doors.len() {
+    for _i in 0..room.doors.len() {
         map[thread_rng().gen_range(1, room.h - 1)][room.w - 1] = '|';
     }
     // add items to map
@@ -41,11 +64,12 @@ fn generate_map(room: &text_engine::Room) -> Vec<Vec<char>> {
         let item_char = match item {
             Item::Sword => '+',
             Item::Key => '?',
+            _ => '&',
         };
         map[rand_y][rand_x] = item_char;
     }
     // add enemies to map
-    for i in 0..room.enemies {
+    for _i in 0..room.enemies {
         let mut rand_y = thread_rng().gen_range(1, room.h - 1);
         let mut rand_x = thread_rng().gen_range(1, room.w - 1);
         // make sure item coordinates are not the same as player default position
@@ -58,11 +82,43 @@ fn generate_map(room: &text_engine::Room) -> Vec<Vec<char>> {
     map
 }
 
-fn print_events() -> Result<()> {
+fn transition(here: &text_engine::Room) -> RoomID {
+    let mut next_room_id: RoomID = RoomID(1);
+    loop {
+        io::stdout().flush().unwrap();
+        println!("A door unlocks!");
+        println!("{}", here.desc);
+        print!("What will you do?\n> ");
+        let input = read_line();
+        let s: String = input.unwrap();
+        println!("{}", s);
+        if let Some(door) = here.doors.iter().find(|d| {
+            let words: Vec<&str> = s.as_str().split(' ').collect();
+            let mut val: bool = false;
+            for w in words.iter() {
+                if d.triggers.contains(w) {
+                    val = true;
+                }
+            }
+            val
+        }) {
+            if let Some(msg) = door.message {
+                println!("{}", msg);
+            }
+            next_room_id = door.target;
+            break;
+        } else {
+            println!("You can't do that!");
+        }
+    }
+    next_room_id
+}
+
+fn print_events<W: std::io::Write>(_w: &mut W) -> Result<()> {
     let rooms = [
         Room {
             name: "Main Room",
-            desc: "This baroque style living room looks fancy. Let's see what the other doors lead too.",
+            desc: "This baroque style living room looks fancy. I see a door in the north side. I wonder where it will lead me?",
             doors: vec![Door{target:RoomID(1), triggers:vec!["door", "north", "go north"], message:None, condition:Some(Item::Key)}],
             items: vec![Item::Sword, Item::Key],
             w: 7,
@@ -70,15 +126,16 @@ fn print_events() -> Result<()> {
             enemies: 3
         },
         Room {
-            name: "Antechamber",
-            desc: "Dark wood paneling covers the walls.  An intricate painting of a field mouse hangs slightly askew on the wall (it looks like you could fix it).  The gilded northern doorway lies open to a shadowy parlour.  You can return to the foyer to the southern door. Items: Sword, Key, Bow, Arrow, and Bedroll",
+            name: "Living room",
+            desc: "You make it to the living room. It is a beautifully decorated room except you're still not free from the cati. 
+            in this room there are three doors. ",
             doors: vec![
-                Door{target:RoomID(0), triggers:vec!["door", "south", "go south", "foyer"], message:None, condition:None},
+                Door{target:RoomID(0), triggers:vec!["door", "south", "go south", "main"], message:None, condition:None},
                 Door{target:RoomID(2), triggers:vec!["north", "doorway", "go north"], message:None, condition:Some(Item::Sword)},
                 Door{target:RoomID(3), triggers:vec!["painting", "mouse", "fix painting"], message:Some("As you adjust the painting, a trap-door opens beneath your feet!"), 
                 condition:Some(Item::Key)}
             ],
-            items: vec![Item::Sword, Item::Key],
+            items: vec![Item::Sword, Item::Key, Item::Bedroll],
             w: 5,
             h: 8,
             enemies: 3
@@ -106,22 +163,24 @@ fn print_events() -> Result<()> {
     let mut inventory: Vec<Item> = vec![];
     let end_rooms = [RoomID(2), RoomID(3)];
     let mut at = RoomID(0);
-    let mut room_items: Vec<Vec<Item>> = vec![];
+    // let mut room_items: Vec<Vec<Item>> = vec![];
     let mut player_pos = (1, 1); // (y,x)
     let player_char = '@';
     let mut player_hp = 2;
     let mut player_score = 0;
+    let mut here = &rooms[at.0];
+    println!("{}", here.desc);
+    println!("press enter to continue");
+    println!("{:?}", read_line());
     // let width: usize = thread_rng().gen_range(6, 10);
     // let height: usize = thread_rng().gen_range(6, 10);
     let mut map = generate_map(&rooms[at.0]);
     loop {
-        let here = &rooms[at.0];
         let mut prev_point = map[player_pos.0][player_pos.1];
         map[player_pos.0][player_pos.1] = player_char;
-        if player_hp == 0{
+        if player_hp == 0 {
             break;
         }
-        
         println!("Score: {}", player_score);
         println!("HP: {}", player_hp);
         println!("Player inventory: {:?}", inventory);
@@ -135,7 +194,6 @@ fn print_events() -> Result<()> {
         if poll(Duration::from_millis(1_000))? {
             // It's guaranteed that read() wont block if `poll` returns `Ok(true)`
             let event = read()?;
-
             if event == Event::Key(KeyCode::Up.into()) {
                 map[player_pos.0][player_pos.1] = prev_point;
                 player_pos.0 -= 1;
@@ -152,91 +210,115 @@ fn print_events() -> Result<()> {
                 map[player_pos.0][player_pos.1] = prev_point;
                 player_pos.1 += 1;
             }
-            if event == Event::Key(KeyCode::Char('x').into()){
-                if inventory.contains(&Item::Sword){
+            if event == Event::Key(KeyCode::Char('x').into()) {
+                if inventory.contains(&Item::Sword) {
                     if map[player_pos.0][player_pos.1 + 1] == '*' {
                         map[player_pos.0][player_pos.1 + 1] = '.';
+                        player_score += 100;
                     }
                     if map[player_pos.0 + 1][player_pos.1] == '*' {
                         map[player_pos.0 + 1][player_pos.1] = '.';
+                        player_score += 100;
                     }
                     if map[player_pos.0 + 1][player_pos.1 + 1] == '*' {
                         map[player_pos.0 + 1][player_pos.1 + 1] = '.';
+                        player_score += 100;
                     }
                     if map[player_pos.0 - 1][player_pos.1] == '*' {
                         map[player_pos.0 - 1][player_pos.1] = '.';
+                        player_score += 100;
                     }
                     if map[player_pos.0][player_pos.1 - 1] == '*' {
                         map[player_pos.0][player_pos.1 - 1] = '.';
+                        player_score += 100;
                     }
                     if map[player_pos.0 - 1][player_pos.1 - 1] == '*' {
                         map[player_pos.0 - 1][player_pos.1 - 1] = '.';
+                        player_score += 100;
                     }
                     if map[player_pos.0 - 1][player_pos.1 + 1] == '*' {
                         map[player_pos.0 - 1][player_pos.1 + 1] = '.';
+                        player_score += 100;
                     }
                     if map[player_pos.0 + 1][player_pos.1 - 1] == '*' {
                         map[player_pos.0 + 1][player_pos.1 - 1] = '.';
+                        player_score += 100;
                     }
-                }                
+                }
             }
             if event == Event::Key(KeyCode::Esc.into()) {
                 break;
             }
         } else {
             // Timeout expired, no event for 1s
-            let mut rand_y = thread_rng().gen_range(1, map[0].len() - 1);
-            let mut rand_x = thread_rng().gen_range(1, map.len() - 1);
+            let mut rand_x = thread_rng().gen_range(1, map[0].len() - 1);
+            let mut rand_y = thread_rng().gen_range(1, map.len() - 1);
             // make sure item coordinates are not the same as player default position
-            while rand_y == 1 && rand_x == 1 || map[rand_y][rand_x] != '.' {
-                rand_y = thread_rng().gen_range(1, map[0].len() - 1);
-                rand_x = thread_rng().gen_range(1, map.len() - 1);
+            while (rand_y == 1 && rand_x == 1) || map[rand_y][rand_x] != '.' {
+                rand_x = thread_rng().gen_range(1, map[0].len() - 1);
+                rand_y = thread_rng().gen_range(1, map.len() - 1);
             }
             map[rand_y][rand_x] = '*';
         }
 
         match map[player_pos.0][player_pos.1] {
-            '+' => inventory.push(Item::Sword),
-            '?' => inventory.push(Item::Key),
-            '*' => {
-                if !inventory.contains(&Item::Sword) {
-                    player_hp -= 1;
-                    player_score -= 100;
-                } else {
-                    player_score += 100;
+            '+' => {
+                if !inventory.contains(&Item::Sword){
+                    inventory.push(Item::Sword);
                 }
+            }
+            '?' => {
+                if !inventory.contains(&Item::Key){
+                    inventory.push(Item::Key);
+                }
+            }
+            '&' => {
+                if !inventory.contains(&Item::Bedroll){
+                    inventory.push(Item::Bedroll);
+                }
+            }
+            '*' => {
+                player_hp -= 1;
+                player_score -= 100;
             }
             '#' => player_pos = (1, 1),
             '|' => {
                 println!("at door");
-                prev_point = '|';
+                if inventory.contains(&Item::Key) {
+                    at = transition(here);
+                    if end_rooms.contains(&at) {
+                        break;
+                    }
+                    map = generate_map(&rooms[at.0]);
+                    here = &rooms[at.0];
+                    player_pos = (1, 1);
+                } else {
+                    player_pos = (1, 1);
+                }
             }
-            _ => {prev_point = '.';}
+            _ => {
+                prev_point = '.';
+            }
         };
         // update last player position to be '.'
         map[player_pos.0][player_pos.1] = prev_point;
+        // execute!(w, Clear(ClearType::All));
     }
     Ok(())
 }
 
 fn start_game() {
     let mut input = String::new();
-    let mut pass = false;
-    while !pass {
-        io::stdout().flush().unwrap();
-        input.clear();
-        io::stdin().read_line(&mut input).unwrap();
-        let input = input.trim();
-        if input == "s" {
-            println!("Good Luck!");
-            pass = true;
-        }
-    }
+    io::stdout().flush().unwrap();
+    input.clear();
+    io::stdin().read_line(&mut input).unwrap();
+    let name = input.trim();
+    println!("Good Luck {}!", name);
 }
 
 fn main() -> Result<()> {
     io::stdout().flush().unwrap();
-    println!("Plathorax: Desert Quest");
+    println!("Cacti Cutter");
     println!("============================");
     println!(
         "You have been wondering the Great Desert for 
@@ -261,11 +343,11 @@ fn main() -> Result<()> {
 
     enable_raw_mode()?;
     let mut stdout = stdout();
-    execute!(stdout, EnableMouseCapture)?;
-    if let Err(e) = print_events() {
+    // execute!(stdout, EnableMouseCapture)?;
+    if let Err(e) = print_events(&mut stdout) {
         println!("Error: {:?}\r", e);
     }
     println!("Game Over");
-    execute!(stdout, DisableMouseCapture)?;
+    // execute!(stdout, DisableMouseCapture)?;
     disable_raw_mode()
 }

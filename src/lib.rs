@@ -30,6 +30,9 @@ pub struct RoomID(pub usize);
 pub enum Item {
     Sword,
     Key,
+    Bow,
+    Arrow,
+    Bedroll,
 }
 
 // enum GameMode {
