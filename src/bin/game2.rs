@@ -1,7 +1,6 @@
 use rand::{thread_rng, Rng};
 use std::io;
 use std::io::Write;
-// use std::thread::sleep;
 use std::string::String;
 use std::{io::stdout, time::Duration};
 use text_engine::*;
@@ -88,10 +87,19 @@ fn transition(here: &text_engine::Room) -> RoomID {
         io::stdout().flush().unwrap();
         println!("A door unlocks!");
         println!("{}", here.desc);
-        print!("What will you do?\n> ");
-        let input = read_line();
-        let s: String = input.unwrap();
-        println!("{}", s);
+        let mut s: String;
+        loop {
+            print!("What will you do?\n> ");
+            let input = read_line();
+            s = input.unwrap();
+            println!("You typed: {}", s);
+            println!("Confirm? Type a number: 1) Yes 2) No");
+            let confirmation = read_line();
+            if confirmation.unwrap() == "1" {
+                break;
+            } 
+        }        
+
         if let Some(door) = here.doors.iter().find(|d| {
             let words: Vec<&str> = s.as_str().split(' ').collect();
             let mut val: bool = false;
@@ -300,9 +308,7 @@ fn print_events<W: std::io::Write>(_w: &mut W) -> Result<()> {
                 prev_point = '.';
             }
         };
-        // update last player position to be '.'
         map[player_pos.0][player_pos.1] = prev_point;
-        // execute!(w, Clear(ClearType::All));
     }
     Ok(())
 }
@@ -336,6 +342,7 @@ fn main() -> Result<()> {
     - if an item is in your inventory simply walk to the object to use it
     - avoid catus"
     );
+    println!("Type in your name and hit enter to get started!");
 
     Duration::from_millis(1_000);
     start_game();
