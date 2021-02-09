@@ -16,8 +16,10 @@ pub struct Room {
     pub enemies: usize,
 }
 pub struct Door {
-    pub target: RoomID,                // More about this in a minute
-    pub triggers: Vec<&'static str>,   // e.g. "go north", "north"
+    pub target: RoomID,              // More about this in a minute
+    pub triggers: Vec<&'static str>, // e.g. "go north", "north"
+    pub verbs: Vec<&'static str>,
+    pub nouns: Vec<&'static str>,
     pub message: Option<&'static str>, // What message, if any, to print when the doorway is traversed
     // Any other info about the door would go here
     pub condition: Option<Item>,

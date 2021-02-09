@@ -97,18 +97,26 @@ fn transition(here: &text_engine::Room) -> RoomID {
             let confirmation = read_line();
             if confirmation.unwrap() == "1" {
                 break;
-            } 
-        }        
+            }
+        }
 
         if let Some(door) = here.doors.iter().find(|d| {
             let words: Vec<&str> = s.as_str().split(' ').collect();
-            let mut val: bool = false;
+            let mut verb_val: bool = false;
+            let mut noun_val: bool = false;
             for w in words.iter() {
-                if d.triggers.contains(w) {
-                    val = true;
+                if d.verbs.contains(w) {
+                    verb_val = true;
+                    break;
                 }
             }
-            val
+            for w in words.iter() {
+                if d.nouns.contains(w) {
+                    noun_val = true;
+                    break;
+                }
+            }
+            noun_val && verb_val
         }) {
             if let Some(msg) = door.message {
                 println!("{}", msg);
@@ -126,8 +134,10 @@ fn print_events<W: std::io::Write>(_w: &mut W) -> Result<()> {
     let rooms = [
         Room {
             name: "Main Room",
-            desc: "This baroque style living room looks fancy. I see a door in the north side. I wonder where it will lead me?",
-            doors: vec![Door{target:RoomID(1), triggers:vec!["door", "north", "go north"], message:None, condition:Some(Item::Key)}],
+            desc: "This baroque style entrance hall looks fancy. I see a door in the north side. I wonder where it will lead me?",
+            doors: vec![Door{target:RoomID(1), triggers:vec!["door", "north", "go north"], 
+            verbs:vec!["walk","run","go","head","sprint", "unlock", "open"], nouns:vec!["door", "it", "chamber", "entrance", "north"],
+            message:None, condition:Some(Item::Key)}],
             items: vec![Item::Sword, Item::Key],
             w: 7,
             h: 7,
@@ -136,11 +146,14 @@ fn print_events<W: std::io::Write>(_w: &mut W) -> Result<()> {
         Room {
             name: "Living room",
             desc: "You make it to the living room. It is a beautifully decorated room except you're still not free from the cati. 
-            in this room there are three doors. ",
+            In this room there are three doors: the way back, a door next to the kitchen on the north side, or a sliding glass door on the south side",
             doors: vec![
-                Door{target:RoomID(0), triggers:vec!["door", "south", "go south", "main"], message:None, condition:None},
-                Door{target:RoomID(2), triggers:vec!["north", "doorway", "go north"], message:None, condition:Some(Item::Sword)},
-                Door{target:RoomID(3), triggers:vec!["painting", "mouse", "fix painting"], message:Some("As you adjust the painting, a trap-door opens beneath your feet!"), 
+                Door{target:RoomID(0), triggers:vec!["door", "south", "go south", "main"], verbs:vec!["walk","trot", "go"], nouns:vec!["back", "main", "fancy", "baroque"],
+                 message:None, condition:None},
+                Door{target:RoomID(2), triggers:vec!["north", "doorway", "go north"], verbs:vec!["walk", "tiptoe", "skip", "go", "run", "open"],
+                nouns:vec!["kitchen","food","smell", "north", "doorway"], message:None, condition:Some(Item::Sword)},
+                Door{target:RoomID(3), triggers:vec!["painting", "mouse", "fix painting"], verbs:vec!["slide", "open", "walk", "run", "go"], 
+                nouns:vec!["glass", "door", "south", "glassdoor"], message:Some("You find the garden. You notice the garden does not have a fence and make a run for it. You win!"), 
                 condition:Some(Item::Key)}
             ],
             items: vec![Item::Sword, Item::Key, Item::Bedroll],
@@ -149,8 +162,8 @@ fn print_events<W: std::io::Write>(_w: &mut W) -> Result<()> {
             enemies: 3
         },
         Room {
-            name: "A Room Full of Snakes!",
-            desc: "The shadows wriggle and shift as you enter the parlour.  The floor is covered in snakes!  The walls are covered in snakes!  The ceiling is covered in snakes!  You are also covered in snakes!\n\nBAD END",
+            name: "A room full of cacti",
+            desc: "You make stumble into a room full of catci and lose.",
             doors:vec![],
             items: vec![],
             w: 5,
@@ -158,8 +171,8 @@ fn print_events<W: std::io::Write>(_w: &mut W) -> Result<()> {
             enemies: 3
         },
         Room {
-            name: "The Vault",
-            desc: "When you regain consciousness, you feel a stabbing sensation in your lower back.  Reaching beneath you, you discover a massive diamond!  This room is full of gold and jewels, and a convenient ladder leading back outdoors!\n\nYou win!",
+            name: "The garden",
+            desc: "You find the garden. You notice the garden does not have a fence and make a run for it. You win!",
             doors:vec![],
             items:vec![],
             w: 5,
@@ -271,17 +284,17 @@ fn print_events<W: std::io::Write>(_w: &mut W) -> Result<()> {
 
         match map[player_pos.0][player_pos.1] {
             '+' => {
-                if !inventory.contains(&Item::Sword){
+                if !inventory.contains(&Item::Sword) {
                     inventory.push(Item::Sword);
                 }
             }
             '?' => {
-                if !inventory.contains(&Item::Key){
+                if !inventory.contains(&Item::Key) {
                     inventory.push(Item::Key);
                 }
             }
             '&' => {
-                if !inventory.contains(&Item::Bedroll){
+                if !inventory.contains(&Item::Bedroll) {
                     inventory.push(Item::Bedroll);
                 }
             }
@@ -340,7 +353,8 @@ fn main() -> Result<()> {
         "RULES: 
     - use arrow keys to navigate your 
     - if an item is in your inventory simply walk to the object to use it
-    - avoid catus"
+    - avoid catus
+    - press x to use your sword"
     );
     println!("Type in your name and hit enter to get started!");
 
